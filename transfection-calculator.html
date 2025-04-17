@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>转染计算器</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: inline-block;
+            width: 200px;
+            font-weight: bold;
+        }
+        input, select {
+            padding: 8px;
+            width: 150px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #plasmidInputs {
+            margin: 20px 0;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        #result {
+            white-space: pre-wrap;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+        }
+        @media (max-width: 600px) {
+            label { width: 100%; }
+            input, select { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1>多质粒转染计算器</h1>
+        
+        <div class="input-group">
+            <label>质粒数量：</label>
+            <select v-model.number="plasmidNum">
+                <option v-for="n in 5" :value="n">{{ n }}</option>
+            </select>
+        </div>
+        
+        <div v-for="(_, index) in plasmidConcs" :key="index" class="input-group">
+            <label>质粒{{ index+1 }}浓度 (ng/μL)：</label>
+            <input type="number" v-model.number="plasmidConcs[index]">
+        </div>
+        
+        <div class="input-group">
+            <label>每种质粒单孔目标量 (ng)：</label>
+            <input type="number" v-model.number="target" step="10">
+        </div>
+        
+        <div class="input-group">
+            <label>孔数：</label>
+            <input type="number" v-model.number="wells">
+        </div>
+        
+        <div class="input-group">
+            <label>转染试剂:总DNA比例 (μL:μg)：</label>
+            <input type="number" v-model.number="ratio" step="0.1">
+        </div>
+        
+        <div class="input-group">
+            <label>每孔混合液体积 (μL)：</label>
+            <input type="number" v-model.number="mixVol">
+        </div>
+        
+        <button @click="calculate">计算母液</button>
+        
+        <pre id="result">{{ resultText }}</pre>
+    </div>
+
+    <script>
+        const app = Vue.createApp({
+            data() {
+                return {
+                    plasmidNum: 2,
+                    plasmidConcs: [null, null],
+                    target: 250,
+                    wells: 4,
+                    ratio: 3,
+                    mixVol: 50,
+                    resultText: "计算结果将显示在这里..."
+                }
+            },
+            watch: {
+                plasmidNum(newVal) {
+                    this.plasmidConcs = Array(newVal).fill(null)
+                }
+            },
+            methods: {
+                calculate() {
+                    try {
+                        // 检查质粒浓度是否全部填写
+                        if (this.plasmidConcs.some(conc => conc === null || isNaN(conc))) {
+                            throw new Error("请填写所有质粒浓度");
+                        }
+                        
+                        // 计算单孔用量
+                        const plasmidVolumes = this.plasmidConcs.map(conc => this.target / conc);
+                        const totalDNA = (this.target * this.plasmidNum) / 1000; // 转为μg
+                        const reagentVol = totalDNA * this.ratio;
+                        
+                        // 计算母液
+                        const masterMixVol = this.mixVol * this.wells;
+                        const masterPlasmids = plasmidVolumes.map(vol => vol * this.wells);
+                        const masterReagent = reagentVol * this.wells;
+                        const optiMEM = masterMixVol - masterPlasmids.reduce((a, b) => a + b, 0) - masterReagent;
+                        
+                        // 生成结果文本
+                        let resultText = "=== 多质粒共转染母液配制方案 ===\n【质粒母液】\n";
+                        this.plasmidConcs.forEach((conc, i) => {
+                            resultText += `质粒${i+1}: ${masterPlasmids[i].toFixed(2)} μL (浓度 ${conc} ng/μL)\n`;
+                        });
+                        
+                        resultText += `转染试剂: ${masterReagent.toFixed(2)} μL\n`;
+                        resultText += `Opti-MEM: ${optiMEM.toFixed(2)} μL\n`;
+                        resultText += "------------------------\n";
+                        resultText += `【单孔操作】\n每孔加母液: ${this.mixVol} μL\n`;
+                                                
+                        this.resultText = resultText;
+                        
+                    } catch (error) {
+                        this.resultText = `错误: ${error.message}`;
+                    }
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
